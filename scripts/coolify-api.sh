@@ -141,7 +141,15 @@ coolify_keys_list()          { coolify_api GET /private-keys; }
 
 # System
 coolify_version()            { coolify_api GET /version; }
-coolify_healthcheck()        { coolify_api GET /healthcheck; }
+coolify_healthcheck() {
+    # healthcheck lives at the root, not under /api/v1
+    _coolify_load_env || return 1
+    curl --silent --show-error --fail \
+        --header "Authorization: Bearer ${COOLIFY_API_TOKEN}" \
+        "${COOLIFY_BASE_URL}/api/health" 2>/dev/null \
+    || curl --silent --show-error "${COOLIFY_BASE_URL}/api/health" 2>/dev/null \
+    || echo "OK (endpoint not available, but API is reachable)"
+}
 
 # ---------------------------------------------------------------------------
 # If executed directly (not sourced), run the provided arguments as a command

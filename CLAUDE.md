@@ -4,6 +4,12 @@
 
 This project provides CLI tools and Claude Code prompts to manage a **Coolify** server instance via its REST API. Coolify is a self-hosted PaaS (like Heroku/Vercel).
 
+## IMPORTANT: Read API_REFERENCE.md
+
+**Before any Coolify operation, you MUST read `API_REFERENCE.md` at the project root.** It contains the exhaustive API documentation: every endpoint, every parameter (name, type, required/optional, defaults), request/response schemas, and multi-step workflow recipes. This is your source of truth for building API calls.
+
+Always `Read API_REFERENCE.md` at the start of a conversation that involves Coolify operations.
+
 ## Configuration
 
 - Copy `.env.example` to `.env` and set `COOLIFY_BASE_URL` and `COOLIFY_API_TOKEN`
@@ -35,56 +41,63 @@ coolify_api POST /applications '{"name":"my-app"}'
 
 ## How to assist the user with Coolify operations
 
-When the user asks to interact with their Coolify server, use the bash tool to run `scripts/coolify` commands or call `scripts/coolify-api.sh` directly. Always prefer the high-level CLI first.
+When the user asks to interact with their Coolify server:
 
-### Common workflows
+1. **Read `API_REFERENCE.md`** to know the exact endpoint, parameters, and workflow
+2. Use `./scripts/coolify` CLI commands for simple operations
+3. Use `./scripts/coolify raw <METHOD> <PATH> '<JSON>'` for create/update/delete or any advanced operation
+4. Chain multiple API calls for complex workflows (see "Common Multi-Step Workflows" in API_REFERENCE.md)
 
-1. **Get an overview**: `./scripts/coolify status`
-2. **List resources**: `./scripts/coolify servers`, `apps`, `databases`, `services`
-3. **Inspect a resource**: `./scripts/coolify app <uuid>`, `server <uuid>`, etc.
-4. **Lifecycle actions**: `./scripts/coolify app:start <uuid>`, `app:stop`, `app:restart`
-5. **Deploy**: `./scripts/coolify deploy <uuid>` or `deploy:tag <tag>`
-6. **Env vars**: `./scripts/coolify app:envs <uuid>`, `app:env:set <uuid> KEY VALUE`
-7. **Raw API for advanced cases**: `./scripts/coolify raw POST /databases/postgresql '{"server_uuid":"...","project_uuid":"...","environment_name":"production"}'`
+### Simple operations (use CLI)
 
-### When creating resources via API
+| Task | Command |
+|------|---------|
+| Overview | `./scripts/coolify status` |
+| List resources | `./scripts/coolify servers`, `apps`, `databases`, `services` |
+| Inspect | `./scripts/coolify app <uuid>`, `server <uuid>`, etc. |
+| Lifecycle | `./scripts/coolify app:start <uuid>`, `app:stop`, `app:restart` |
+| Deploy | `./scripts/coolify deploy <uuid>` or `deploy:tag <tag>` |
+| Env vars | `./scripts/coolify app:envs <uuid>`, `app:env:set <uuid> KEY VALUE` |
 
-Use `./scripts/coolify raw` for create/update operations. Key patterns:
+### Complex operations (use raw API)
+
+Use `./scripts/coolify raw` for anything not covered by the CLI. Always refer to `API_REFERENCE.md` for the exact parameters.
+
+```bash
+# Create a PostgreSQL database
+./scripts/coolify raw POST /databases/postgresql '{"server_uuid":"...","project_uuid":"...","environment_name":"production","name":"my-db","instant_deploy":true}'
+
+# Create an app from Docker image
+./scripts/coolify raw POST /applications/dockerimage '{"server_uuid":"...","project_uuid":"...","environment_name":"production","name":"my-app","docker_registry_image_name":"nginx","ports_exposes":"80","instant_deploy":true}'
+
+# Bulk set env vars
+./scripts/coolify raw PATCH /applications/{uuid}/envs/bulk '[{"key":"K1","value":"V1"},{"key":"K2","value":"V2"}]'
+
+# Update application config
+./scripts/coolify raw PATCH /applications/{uuid} '{"fqdn":"https://new.example.com"}'
+```
+
+### Key patterns
+
 - All bodies are JSON with `Content-Type: application/json`
-- Most creation endpoints accept `instant_deploy: true` for immediate deployment
+- Most creation endpoints accept `instant_deploy: true`
 - UUIDs are returned in creation responses
-
-## Coolify API Reference (v1)
-
-Base: `{COOLIFY_BASE_URL}/api/v1`
-
-### Authentication
-All requests require: `Authorization: Bearer <token>`
-
-### Endpoints
-
-| Resource | List | Get | Create | Update | Delete | Actions |
-|----------|------|-----|--------|--------|--------|---------|
-| Servers | `GET /servers` | `GET /servers/{uuid}` | `POST /servers` | `PATCH /servers/{uuid}` | `DELETE /servers/{uuid}` | `/validate`, `/resources`, `/domains` |
-| Applications | `GET /applications` | `GET /applications/{uuid}` | `POST /applications/public`, `/private-github-app`, `/private-deploy-key`, `/dockerfile`, `/dockerimage` | `PATCH /applications/{uuid}` | `DELETE /applications/{uuid}` | `/start`, `/stop`, `/restart`, `/logs`, `/envs` |
-| Databases | `GET /databases` | `GET /databases/{uuid}` | `POST /databases/{type}` (postgresql, mysql, mariadb, mongodb, redis, clickhouse, dragonfly, keydb) | `PATCH /databases/{uuid}` | `DELETE /databases/{uuid}` | `/start`, `/stop`, `/restart`, `/backups` |
-| Services | `GET /services` | `GET /services/{uuid}` | `POST /services` | `PATCH /services/{uuid}` | `DELETE /services/{uuid}` | `/start`, `/stop`, `/restart`, `/envs` |
-| Projects | `GET /projects` | `GET /projects/{uuid}` | `POST /projects` | `PATCH /projects/{uuid}` | `DELETE /projects/{uuid}` | `/environments` |
-| Deployments | `GET /deployments` | `GET /deployments/{uuid}` | `GET /deploy?uuid=X` | - | - | `/cancel` |
-| Teams | `GET /teams` | `GET /teams/{id}` | - | - | - | `/members`, `/current` |
-| Private Keys | `GET /private-keys` | `GET /private-keys/{uuid}` | `POST /private-keys` | `PATCH /private-keys/{uuid}` | `DELETE /private-keys/{uuid}` | - |
-| Resources | `GET /resources` | - | - | - | - | - |
-| System | `GET /version`, `GET /healthcheck` | - | - | - | - | - |
-
-### HTTP Status Codes
-- **200**: Success
-- **400**: Invalid token
-- **401**: Unauthenticated
-- **404**: Resource not found
-- **409**: Domain conflict (use `force_domain_override: true` to bypass)
-- **422**: Validation error (check `errors` field)
-- **429**: Rate limited (check `Retry-After` header)
+- Use `force_domain_override: true` to bypass domain conflict 409 errors
+- For multi-step workflows, read the "Common Multi-Step Workflows" section in API_REFERENCE.md
 
 ## Slash commands
 
-Custom prompts are available in `.claude/commands/` for common Coolify operations.
+Custom prompts are available in `.claude/commands/` for common Coolify operations:
+
+| Command | Description |
+|---------|-------------|
+| `/status` | Full dashboard overview |
+| `/servers` | List all servers |
+| `/apps` | List all applications |
+| `/deploy` | Deploy an application |
+| `/inspect` | Inspect a resource in detail |
+| `/manage` | Start/stop/restart a resource |
+| `/envs` | Manage environment variables |
+| `/create-app` | Interactive app creation wizard |
+| `/create-db` | Interactive database creation wizard |
+| `/api` | Raw API call |

@@ -5,20 +5,21 @@ description: Query the typed memory on demand and present a cited synthesis (rea
 
 # /recall — interroger la mémoire (lecture seule)
 
-Introspection de la mémoire à la demande. **Ne modifie rien.**
+Introspection de la mémoire à la demande. **Ne modifie rien.** C'est le **cas d'école du
+`memory-retriever`** : ratisser large en lecture, rendre une synthèse citée compacte.
 
 ## Procédure
 
-1. Résous l'infra active (`./scripts/infra current`) — la recherche couvre `memory/` (global) +
-   `infras/<actif>/` (infra).
-2. `./scripts/memory search <termes de la demande>` pour lister les fiches pertinentes (le tri met
-   les matchs title/tags d'abord).
-3. **Ouvre les fiches pertinentes** (et au besoin `facts.md` / `registry.md` de l'infra active pour
-   le concret).
-4. **Présente une synthèse citée** : réponds à la question en t'appuyant sur les fiches, et **cite**
-   chacune sous la forme `type/scope/id` avec son chemin. Si plusieurs fiches se complètent
-   (pattern global + concret infra), relie-les dans l'explication.
-5. Si rien ne matche, dis-le clairement et propose éventuellement `/learn` si la session contient
-   une matière non encore mémorisée.
+1. **Délègue au subagent `memory-retriever`** (`.claude/agents/memory-retriever.md`, lecture
+   seule) : passe-lui la question de l'utilisateur (et l'infra active si tu la connais déjà). Il
+   exécute le protocole RAG complet — résoudre l'infra → INDEX → `./scripts/memory search` →
+   ouvrir les fiches pertinentes (+ `facts.md` / `registry.md` au besoin) — et **absorbe le bruit**.
+2. **Restitue sa synthèse** à l'utilisateur : la réponse adossée aux fiches, chacune citée sous la
+   forme `type/scope/id` avec son chemin ; patterns global + concret infra reliés. S'il n'a rien
+   trouvé, dis-le et propose `/learn` si la session contient une matière non mémorisée.
 
+> Le contexte principal ne reçoit que la synthèse (pas les fiches brutes) → on reste léger.
+> Pour une **micro-question** triviale (réponse dans 1 fiche évidente), un `./scripts/memory
+> search` inline suffit — inutile de déléguer.
+>
 > Lecture seule : si l'utilisateur veut *enregistrer* quelque chose, c'est `/learn`.

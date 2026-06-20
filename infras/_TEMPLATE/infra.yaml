@@ -1,0 +1,8 @@
+name: <nom-court>            # ex: baijobu
+base_url: https://<coolify>  # URL Coolify (sans slash final)
+proxy: traefik               # traefik | caddy | none
+wildcard_domain: "*.example" # wildcard DNS si présent (sinon "")
+coolify_version: ""          # ex: 4.0.0-beta.463
+server_uuid: ""              # UUID du serveur principal
+ip: ""                       # IP publique
+notes: ""

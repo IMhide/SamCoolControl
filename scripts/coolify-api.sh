@@ -16,11 +16,49 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration (multi-infra profiles)
 # ---------------------------------------------------------------------------
 
+# Resolve the active infra profile name.
+# Order: $COOLIFY_PROFILE (env) -> infras/.current (file) -> empty (legacy fallback).
+# Echoes the profile name (possibly empty). Never fails.
+_coolify_resolve_profile() {
+    if [[ -n "${COOLIFY_PROFILE:-}" ]]; then
+        printf '%s' "$COOLIFY_PROFILE"
+        return 0
+    fi
+    local current_file="$PROJECT_ROOT/infras/.current"
+    if [[ -f "$current_file" ]]; then
+        # trim whitespace/newlines
+        local name
+        name="$(tr -d '[:space:]' < "$current_file")"
+        printf '%s' "$name"
+        return 0
+    fi
+    printf ''
+}
+
 _coolify_load_env() {
-    local env_file="${COOLIFY_ENV_FILE:-$PROJECT_ROOT/.env}"
+    # Highest priority: an explicit env file path (back-compat / tests).
+    local env_file="${COOLIFY_ENV_FILE:-}"
+
+    if [[ -z "$env_file" ]]; then
+        # Resolve the active profile and prefer its per-infra .env.
+        local profile
+        profile="$(_coolify_resolve_profile)"
+        if [[ -n "$profile" ]]; then
+            local profile_env="$PROJECT_ROOT/infras/$profile/.env"
+            if [[ -f "$profile_env" ]]; then
+                env_file="$profile_env"
+            else
+                echo "WARNING: profile '$profile' selected but $profile_env not found; falling back to $PROJECT_ROOT/.env" >&2
+            fi
+        fi
+    fi
+
+    # Fallback to the legacy root .env (mono-server back-compat).
+    env_file="${env_file:-$PROJECT_ROOT/.env}"
+
     if [[ -f "$env_file" ]]; then
         # shellcheck disable=SC1090
         set -a
@@ -29,11 +67,11 @@ _coolify_load_env() {
     fi
 
     if [[ -z "${COOLIFY_BASE_URL:-}" ]]; then
-        echo "ERROR: COOLIFY_BASE_URL is not set. Copy .env.example to .env and configure it." >&2
+        echo "ERROR: COOLIFY_BASE_URL is not set (looked in: $env_file). Configure it, or run: ./scripts/infra new <name>." >&2
         return 1
     fi
     if [[ -z "${COOLIFY_API_TOKEN:-}" ]]; then
-        echo "ERROR: COOLIFY_API_TOKEN is not set. Generate one from your Coolify UI." >&2
+        echo "ERROR: COOLIFY_API_TOKEN is not set (looked in: $env_file). Generate one from your Coolify UI." >&2
         return 1
     fi
 

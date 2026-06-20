@@ -3,6 +3,20 @@
 .env.local
 .env.production
 
+# Per-infra memory is LOCAL ONLY (secrets + server-specific knowledge).
+# Everything under infras/ is ignored EXCEPT the README and the _TEMPLATE skeleton.
+/infras/*
+!/infras/README.md
+!/infras/_TEMPLATE/
+!/infras/_TEMPLATE/**
+
+# Legacy cookbook holds plaintext secrets (RustFS/Supabase keys) -> never commit.
+# (Its content is migrated into infras/<name>/ during agentification.)
+COOKBOOK.md
+
+# Local working docs / design notes / debug prompts (not part of the shared repo).
+docs/
+
 # OS files
 .DS_Store
 Thumbs.db

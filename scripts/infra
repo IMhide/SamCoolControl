@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+#
+# infra - Manage Coolify infra profiles (multi-server)
+#
+# Each infra is a local directory under infras/<name>/ holding its own .env,
+# infra.yaml, facts.md, registry.md and typed memory. The "active" infra is
+# recorded in infras/.current (and overridable via COOLIFY_PROFILE / --infra).
+#
+# Usage:
+#   infra list                 List infras (marks the active one)
+#   infra current              Print the active infra (or "(none)")
+#   infra use <name>           Set <name> as the active infra
+#   infra show <name>          Show infra.yaml + a summary of facts/registry
+#   infra new <name>           Create infras/<name>/ from the _TEMPLATE skeleton
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+INFRAS_DIR="$PROJECT_ROOT/infras"
+CURRENT_FILE="$INFRAS_DIR/.current"
+TEMPLATE_DIR="$INFRAS_DIR/_TEMPLATE"
+
+# Colors
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; BOLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
+_err()  { echo -e "${RED}$*${NC}" >&2; }
+_ok()   { echo -e "${GREEN}$*${NC}"; }
+_warn() { echo -e "${YELLOW}$*${NC}"; }
+_dim()  { echo -e "${DIM}$*${NC}"; }
+
+_current_name() {
+    [[ -f "$CURRENT_FILE" ]] && tr -d '[:space:]' < "$CURRENT_FILE" || printf ''
+}
+
+# List real infra directories (exclude _TEMPLATE and non-directories).
+_list_names() {
+    [[ -d "$INFRAS_DIR" ]] || return 0
+    local d
+    for d in "$INFRAS_DIR"/*/; do
+        [[ -d "$d" ]] || continue
+        local name
+        name="$(basename "$d")"
+        [[ "$name" == "_TEMPLATE" ]] && continue
+        printf '%s\n' "$name"
+    done
+}
+
+cmd_list() {
+    local active; active="$(_current_name)"
+    local found=0 name
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        found=1
+        if [[ "$name" == "$active" ]]; then
+            _ok "* $name   (active)"
+        else
+            echo "  $name"
+        fi
+    done < <(_list_names)
+    if [[ "$found" -eq 0 ]]; then
+        _dim "(no infra yet — create one with: ./scripts/infra new <name>)"
+    fi
+}
+
+cmd_current() {
+    local active; active="$(_current_name)"
+    if [[ -n "$active" ]]; then echo "$active"; else echo "(none)"; fi
+}
+
+cmd_use() {
+    local name="${1:?Usage: infra use <name>}"
+    if [[ ! -d "$INFRAS_DIR/$name" ]]; then
+        _err "Infra '$name' does not exist ($INFRAS_DIR/$name)."
+        _dim "Available:"; cmd_list >&2
+        return 1
+    fi
+    printf '%s\n' "$name" > "$CURRENT_FILE"
+    _ok "Active infra set to: $name"
+    if [[ ! -f "$INFRAS_DIR/$name/.env" ]]; then
+        _warn "Note: $INFRAS_DIR/$name/.env is missing — fill it before API calls."
+    fi
+}
+
+cmd_show() {
+    local name="${1:?Usage: infra show <name>}"
+    local dir="$INFRAS_DIR/$name"
+    [[ -d "$dir" ]] || { _err "Infra '$name' does not exist ($dir)."; return 1; }
+
+    echo -e "${BOLD}=== infra: $name ===${NC}"
+    if [[ "$name" == "$(_current_name)" ]]; then _dim "(this is the active infra)"; fi
+    echo
+    if [[ -f "$dir/infra.yaml" ]]; then
+        echo -e "${BOLD}infra.yaml${NC}"
+        cat "$dir/infra.yaml"
+    else
+        _dim "(no infra.yaml)"
+    fi
+    echo
+    if [[ -f "$dir/.env" ]]; then
+        _ok ".env present"
+        # show keys only, never values
+        local keys; keys="$(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$dir/.env" 2>/dev/null | tr -d '=' | tr '\n' ' ' || true)"
+        _dim "  keys: ${keys:-(none)}"
+    else
+        _warn ".env MISSING (no API access until created)"
+    fi
+    echo
+    if [[ -f "$dir/facts.md" ]]; then
+        echo -e "${BOLD}facts.md (head)${NC}"
+        head -n 20 "$dir/facts.md"
+        echo
+    fi
+    if [[ -f "$dir/registry.md" ]]; then
+        echo -e "${BOLD}registry.md (head)${NC}"
+        head -n 20 "$dir/registry.md"
+    fi
+}
+
+cmd_new() {
+    local name="${1:?Usage: infra new <name>}"
+    local dir="$INFRAS_DIR/$name"
+
+    if [[ "$name" == "_TEMPLATE" ]]; then _err "'_TEMPLATE' is reserved."; return 1; fi
+    if [[ -e "$dir" ]]; then _err "Infra '$name' already exists ($dir) — refusing to overwrite."; return 1; fi
+    if [[ ! -d "$TEMPLATE_DIR" ]]; then _err "Template not found: $TEMPLATE_DIR"; return 1; fi
+
+    cp -R "$TEMPLATE_DIR" "$dir"
+
+    # Rename .env.example -> .env (only if .env not already shipped)
+    if [[ -f "$dir/.env.example" && ! -f "$dir/.env" ]]; then
+        mv "$dir/.env.example" "$dir/.env"
+    fi
+
+    # Substitute name: in infra.yaml (portable BSD/GNU sed via temp file)
+    if [[ -f "$dir/infra.yaml" ]]; then
+        sed "s|^name: .*|name: $name|" "$dir/infra.yaml" > "$dir/infra.yaml.tmp" \
+            && mv "$dir/infra.yaml.tmp" "$dir/infra.yaml"
+    fi
+
+    _ok "Created infra '$name' at $dir"
+    echo
+    _warn "Next steps:"
+    echo "  1. Edit $dir/.env        (COOLIFY_BASE_URL + COOLIFY_API_TOKEN)"
+    echo "  2. Edit $dir/infra.yaml  (base_url, server_uuid, ip, wildcard_domain, version)"
+    echo "  3. ./scripts/infra use $name"
+    echo "  4. ./scripts/coolify --infra $name version   # validate connection"
+    echo
+    _dim "Reminder: infras/$name/ is LOCAL (gitignored). Back it up outside git."
+}
+
+usage() {
+    cat <<'HELP'
+infra - manage Coolify infra profiles
+
+USAGE:
+    infra list                 List infras (marks the active one)
+    infra current              Print the active infra (or "(none)")
+    infra use <name>           Set <name> as the active infra
+    infra show <name>          Show infra.yaml + facts/registry summary
+    infra new <name>           Create infras/<name>/ from the _TEMPLATE skeleton
+HELP
+}
+
+main() {
+    local cmd="${1:-list}"
+    shift || true
+    case "$cmd" in
+        list|ls)        cmd_list ;;
+        current|active) cmd_current ;;
+        use|switch)     cmd_use "$@" ;;
+        show|info)      cmd_show "$@" ;;
+        new|create)     cmd_new "$@" ;;
+        help|-h|--help) usage ;;
+        *)              _err "Unknown command: $cmd"; usage; exit 1 ;;
+    esac
+}
+
+main "$@"

@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '. | \"/Users/hide/Agentique/coolify_control/.claude/misc/notif.sh \\\"\\(.hook_event_name)\\\" \\\"\\(.message)\\\"\"' | sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '. | \"/Users/hide/Agentique/coolify_control/.claude/misc/notif.sh \\\"\\(.hook_event_name)\\\" \\\"\\(.message)\\\"\"' | sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/hide/Agentique/coolify_control/.claude/misc/notif.sh \"Claude has finished\" \"What's next?\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -31,18 +31,45 @@ Les deux sont complémentaires : `API_REFERENCE.md` dit *ce que l'API accepte*, 
 
 ## 3. Protocole RAG (AVANT de répondre à toute tâche Coolify)
 
+Le RAG a **deux modes** selon l'ampleur de la demande. Choisis avant de lire quoi que ce soit —
+le but est de **garder ton contexte principal propre pour l'exécution**.
+
+### 3.a — Déléguer au `memory-retriever` (tâche large)
+
+Pour une demande qui demande de **ratisser large** la mémoire, **délègue la lecture** au subagent
+`memory-retriever` (lecture seule) et travaille sur **sa synthèse citée**, pas sur les fiches brutes.
+Cas typiques :
+- **provision / création** d'une ressource (il faut le bon cookbook + les habits + les décisions liées) ;
+- **incident** (chercher un incident passé + le fix + l'archi concernée) ;
+- **décision d'archi** ou question transverse (« comment on câble X ici ») ;
+- toute demande où tu anticipes d'ouvrir **≳ 3 fiches** ou de lire plusieurs INDEX.
+
+Tu lances l'agent `memory-retriever` avec la question reformulée + l'infra active connue, et tu
+récupères : la réponse, les ids `type/scope/id` cités, le concret (UUIDs/domaines) et les lacunes.
+Le bruit (INDEX, fiches écartées) **reste chez lui** — ton contexte ne reçoit que la synthèse.
+
+> Le `memory-retriever` ne fait QUE lire. **L'exécution (appels API, confirmation de cible,
+> écriture) et `/learn` restent à toi.** Tu prends sa synthèse et tu agis.
+
+### 3.b — RAG inline (micro-question)
+
+Pour une **micro-question** ciblée (« c'est quoi l'UUID du serveur ? », « on a déjà fait X ? » avec
+réponse attendue dans 1 fiche), **ne délègue pas** — l'aller-retour d'agent coûterait plus que la
+pollution évitée. Fais le RAG toi-même :
+
 1. **Résoudre l'infra active** : `./scripts/infra current` (et `./scripts/infra list`).
-2. **Lire les INDEX légers** : `memory/*/INDEX.md` + `infras/<actif>/*/INDEX.md`, ainsi que
-   `infras/<actif>/facts.md` et `infras/<actif>/registry.md`. Ces fichiers tiennent en un coup
-   d'œil et donnent la carte du savoir disponible.
-3. **Cibler** : `./scripts/memory search <termes de la demande>` pour trouver les fiches
-   pertinentes (le tri met les matchs title/tags en premier).
-4. **Ouvrir UNIQUEMENT les fiches pertinentes** (ne pas tout charger).
-5. **Répondre en t'appuyant dessus**, et **citer** les fiches utilisées sous la forme
-   `type/scope/id` (ex. « d'après `decisions/global/0001` et `cookbook/global/0001` »).
+2. **Lire les INDEX légers** si utile : `memory/*/INDEX.md` + `infras/<actif>/*/INDEX.md`, +
+   `infras/<actif>/facts.md` / `registry.md` si la question touche du concret.
+3. **Cibler** : `./scripts/memory search <termes de la demande>`.
+4. **Ouvrir UNIQUEMENT la/les fiche(s) pertinente(s)** (ne pas tout charger).
+5. **Répondre** en **citant** les fiches utilisées sous la forme `type/scope/id`
+   (ex. « d'après `decisions/global/0001` et `cookbook/global/0001` »).
 
 Si la demande touche une ressource concrète (UUID, domaine), `registry.md` et `facts.md` de
 l'infra active sont prioritaires.
+
+> **En cas de doute sur l'ampleur, délègue** (3.a) : la synthèse compresse de toute façon, et un
+> contexte principal propre vaut mieux qu'un aller-retour économisé.
 
 ## 4. Routage multi-infra
 

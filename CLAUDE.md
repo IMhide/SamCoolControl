@@ -51,12 +51,23 @@ Le savoir vit en **fiches atomiques typées**, en **5 types × 2 portées** :
 - Chaque dossier a un **`INDEX.md`** (tableau résumé) = couche RAG légère lue en premier.
 - Détail du format et du fonctionnement : **`memory/README.md`**.
 
-**Protocole RAG (avant de répondre à toute tâche Coolify)** :
-1. Résoudre l'infra active (`./scripts/infra current`).
-2. Lire les INDEX légers (`memory/*/INDEX.md` + `infras/<actif>/*/INDEX.md` + `facts.md` + `registry.md`).
-3. Cibler avec `./scripts/memory search <termes>`.
-4. Ouvrir **uniquement** les fiches pertinentes.
-5. Répondre en **citant** les fiches utilisées (`type/scope/id`).
+**Protocole RAG (avant de répondre à toute tâche Coolify)** — **deux modes selon l'ampleur** :
+
+- **Tâche large** (provision, incident, décision d'archi, `/recall`, ou ≳ 3 fiches à ouvrir) →
+  **déléguer la lecture au subagent `memory-retriever`** (`.claude/agents/memory-retriever.md`,
+  lecture seule). Il exécute le protocole complet, absorbe le bruit (INDEX + fiches écartées) et
+  **ne rend qu'une synthèse citée** (`type/scope/id` + concret + lacunes). On agit sur la synthèse,
+  pas sur les fiches brutes → **contexte principal propre**. L'exécution (API, confirmation de
+  cible) et `/learn` restent côté appelant.
+- **Micro-question** (réponse dans 1 fiche, ex. « l'UUID du serveur ? ») → **RAG inline** (pas de
+  subagent, l'aller-retour coûterait plus cher) :
+  1. Résoudre l'infra active (`./scripts/infra current`).
+  2. Lire les INDEX légers (`memory/*/INDEX.md` + `infras/<actif>/*/INDEX.md` + `facts.md` + `registry.md`).
+  3. Cibler avec `./scripts/memory search <termes>`.
+  4. Ouvrir **uniquement** les fiches pertinentes.
+  5. Répondre en **citant** les fiches utilisées (`type/scope/id`).
+
+En cas de doute sur l'ampleur, **déléguer** : la synthèse compresse de toute façon.
 
 ## Boucle `/learn` (mémoire = responsabilité partagée)
 
@@ -99,7 +110,8 @@ coolify_api POST /applications '{"name":"my-app"}'
 
 ## How to assist the user with Coolify operations
 
-1. **Run the RAG protocol** (résoudre l'infra active, lire les INDEX, `scripts/memory search`).
+1. **Run the RAG protocol** (cf. ci-dessus) : tâche large → **déléguer au `memory-retriever`** et
+   partir de sa synthèse citée ; micro-question → RAG inline (`scripts/memory search`).
 2. **`Read API_REFERENCE.md`** pour l'endpoint, les paramètres et le workflow exacts.
 3. Utiliser `./scripts/coolify` pour les opérations simples ;
    `./scripts/coolify [--infra <nom>] raw <METHOD> <PATH> '<JSON>'` pour create/update/delete.
